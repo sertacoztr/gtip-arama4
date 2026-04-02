@@ -11,44 +11,30 @@ export default async function handler(req, res) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: "ANTHROPIC_API_KEY eksik." });
 
-  const prompt = `GTİP kodu: ${code}
-Ürün: ${desc}
+  const prompt = `GTİP: ${code} / Urun: ${desc}
 
-Sen Türkiye dış ticaret uzmanısın. ITC Trademap, TÜİK ve gümrük mevzuatı verilerini biliyorsun.
+YALNIZCA asagidaki JSON formatini doldur, baska hicbir sey yazma, markdown kullanma:
 
-SADECE aşağıdaki JSON formatında yanıt ver, başka hiçbir şey yazma:
 {
-  "vergi_ab": "AB ülkelerinden Türkiye'ye ithalattaki gümrük vergisi (örn: %0)",
-  "vergi_diger": "AB dışı ülkelerden Türkiye'ye ithalattaki genel gümrük vergisi (örn: %10)",
-  "kdv": "Türkiye KDV oranı (örn: %18)",
-  "ek_vergi": "Varsa ek mali yük (antidamping, fon vb.), yoksa boş string",
+  "vergi_ab": "ornek: %0",
+  "vergi_diger": "ornek: %10",
+  "kdv": "ornek: %18",
+  "ek_vergi": "",
   "ihracat_ulkeler": [
-    {
-      "ulke": "🇩🇪 Almanya",
-      "pay": 18,
-      "hacim_milyon_usd": 245,
-      "turkiye_gumruk": "Türkiye menşeli ürün için bu ülkedeki gümrük vergisi (örn: %0 AB-Türkiye GTB)"
-    }
+    {"ulke": "Almanya", "pay": 18, "hacim_milyon_usd": 245, "turkiye_gumruk": "%0"},
+    {"ulke": "ABD", "pay": 14, "hacim_milyon_usd": 190, "turkiye_gumruk": "%2.5"}
   ],
   "musteriler": [
-    {
-      "firma": "Gerçek firma adı",
-      "ulke": "🇩🇪 Almanya",
-      "sektor": "Sektör/faaliyet",
-      "aciklama": "Bu firmayı neden potansiyel alıcı olarak öneriyorsun"
-    }
+    {"firma": "Firma Adi", "ulke": "Almanya", "sektor": "Sektor", "aciklama": "Aciklama"},
+    {"firma": "Firma Adi", "ulke": "ABD", "sektor": "Sektor", "aciklama": "Aciklama"}
   ]
 }
 
-ihracat_ulkeler: Türkiye'nin bu GTİP kodundaki ürünü en fazla İHRAÇ ETTİĞİ top 10 ülke.
-  - pay: Türkiye'nin toplam ihracatındaki yüzde payı (toplam ~100)
-  - hacim_milyon_usd: Tahmini yıllık ihracat değeri milyon USD olarak (gerçekçi rakamlar)
-  - turkiye_gumruk: O ülkenin Türkiye menşeli bu ürüne uyguladığı gümrük vergisi (ticaret anlaşmaları dahil)
-
-musteriler: Bu GTİP ürününü Türkiye'den satın alma potansiyeli olan 10 GERÇEK yabancı firma/şirket.
-  - ITC Trademap, sektör rehberleri ve küresel tedarik zinciri bilgine dayanarak öner
-  - Gerçek, bilinen firma isimleri kullan
-  - Her firmanın neden bu ürünü Türkiye'den alabileceğini kısaca açıkla`;
+Kurallar:
+- ihracat_ulkeler: Turkiye nin bu GTIPten en cok IHRAC ETTIGI 10 ulke. pay toplami ~100 olsun. hacim_milyon_usd gercekci olsun. turkiye_gumruk o ulkenin Turkiye menseili urune uygulattigi vergi orani.
+- musteriler: Bu urunu Turkiye den alabilecek 10 GERCEK yabanci firma. ITC Trademap ve sektor rehberlerine gore sec. aciklama kisaca neden potansiyel alici oldugunu belirt.
+- Bayrak emoji kullan ulke isimlerinin basina.
+- Sadece JSON, hicbir aciklama ekleme.`;
 
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
@@ -61,7 +47,7 @@ musteriler: Bu GTİP ürününü Türkiye'den satın alma potansiyeli olan 10 GE
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 1500,
-        system: "Sen Türkiye dış ticareti, GTİP kodları ve küresel tedarik zincirleri konusunda uzman bir danışmansın. ITC Trademap, TÜİK ve gümrük verilerini iyi biliyorsun. SADECE geçerli JSON döndür, başka hiçbir şey yazma, markdown kullanma.",
+        system: "Sen Turkiye dis ticaret ve GTİP uzmanisın. SADECE gecerli JSON dondur, baska hicbir sey yazma, markdown yok, kod blogu yok.",
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -69,7 +55,7 @@ musteriler: Bu GTİP ürününü Türkiye'den satın alma potansiyeli olan 10 GE
     if (data.error) return res.status(500).json({ error: data.error.message });
     const txt = data.content[0].text.replace(/```json|```/g, "").trim();
     const m = txt.match(/\{[\s\S]*\}/);
-    if (!m) return res.status(500).json({ error: "JSON parse hatası: " + txt.slice(0, 80) });
+    if (!m) return res.status(500).json({ error: "JSON bulunamadi: " + txt.slice(0, 100) });
     return res.status(200).json(JSON.parse(m[0]));
   } catch (e) {
     return res.status(500).json({ error: e.message });
